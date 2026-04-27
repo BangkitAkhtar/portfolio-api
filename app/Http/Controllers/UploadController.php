@@ -96,6 +96,30 @@ class UploadController extends Controller
                     ], 500);
                 }
 
+                // --- FITUR BARU: SMART RESIZING (Maks 800px) ---
+                $width = imagesx($image);
+                $height = imagesy($image);
+                $maxWidth = 800;
+                $maxHeight = 800;
+
+                if ($width > $maxWidth || $height > $maxHeight) {
+                    $ratio = min($maxWidth / $width, $maxHeight / $height);
+                    $newWidth = round($width * $ratio);
+                    $newHeight = round($height * $ratio);
+                    
+                    $resizedImage = imagecreatetruecolor($newWidth, $newHeight);
+                    // Handle transparansi
+                    imagealphablending($resizedImage, false);
+                    imagesavealpha($resizedImage, true);
+                    $transparent = imagecolorallocatealpha($resizedImage, 255, 255, 255, 127);
+                    imagefilledrectangle($resizedImage, 0, 0, $newWidth, $newHeight, $transparent);
+                    
+                    imagecopyresampled($resizedImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+                    imagedestroy($image);
+                    $image = $resizedImage; // Gunakan gambar yang sudah di-resize
+                }
+                // ---------------------------------------------
+
                 // Convert dan simpan ke format WebP dengan kualitas yang sudah diatur otomatis
                 $success = imagewebp($image, $absolutePath, $quality);
 
