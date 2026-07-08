@@ -25,6 +25,7 @@ class PortfolioController extends Controller
                 "experiences" => [],
                 "education" => [],
                 "certifications" => [],
+                "trainings" => [],
                 "projects" => [],
                 "volunteers" => [],
                 "awards" => [],
