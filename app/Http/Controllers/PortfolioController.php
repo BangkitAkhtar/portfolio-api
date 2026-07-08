@@ -10,11 +10,12 @@ class PortfolioController extends Controller
 {
     public function index()
     {
-        $portfolio = Cache::rememberForever('portfolio_data', function () {
-            return PortfolioSetting::first();
+        $data = Cache::rememberForever('portfolio_settings_data', function () {
+            $portfolio = PortfolioSetting::first();
+            return $portfolio ? $portfolio->data : null;
         });
 
-        if (!$portfolio) {
+        if (!$data) {
             return response()->json([
                 "profile" => [
                     "name" => "",
@@ -37,7 +38,7 @@ class PortfolioController extends Controller
             ]);
         }
 
-        return response()->json($portfolio->data);
+        return response()->json($data);
     }
 
     public function store(Request $request)
@@ -54,7 +55,7 @@ class PortfolioController extends Controller
             ]);
         }
 
-        Cache::forget('portfolio_data');
+        Cache::forget('portfolio_settings_data');
 
         return response()->json([
             'message' => 'Portfolio saved successfully',
