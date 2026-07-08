@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\PortfolioSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class PortfolioController extends Controller
 {
     public function index()
     {
-        $portfolio = PortfolioSetting::first();
+        $portfolio = Cache::rememberForever('portfolio_data', function () {
+            return PortfolioSetting::first();
+        });
 
         if (!$portfolio) {
             return response()->json([
@@ -50,6 +53,8 @@ class PortfolioController extends Controller
                 'data' => $request->all()
             ]);
         }
+
+        Cache::forget('portfolio_data');
 
         return response()->json([
             'message' => 'Portfolio saved successfully',
