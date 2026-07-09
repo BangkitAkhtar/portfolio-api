@@ -49,9 +49,16 @@ class UploadController extends Controller
             mkdir(storage_path('app/public/uploads'), 0755, true);
         }
 
-        // Jika file adalah GIF, langsung pindahkan dengan nama aslinya (tidak diconvert)
-        if ($finalExtension === 'gif') {
-            // Kita pakai storeAs agar namanya sesuai dengan yang kita buat (bukan random hash)
+        // Jika file adalah GIF, ATAU server tidak support WebP (GD Library missing WebP), langsung simpan file aslinya
+        if ($finalExtension === 'gif' || !function_exists('imagewebp') || !function_exists('imagecreatefromjpeg')) {
+            // Gunakan file asli dan ekstensi aslinya
+            $filename = $safeName . '.' . $originalExtension;
+            $counter = 1;
+            while (Storage::disk('public')->exists('uploads/' . $filename)) {
+                $filename = $safeName . ' (' . $counter . ').' . $originalExtension;
+                $counter++;
+            }
+            $path = 'uploads/' . $filename;
             $request->file('file')->storeAs('uploads', $filename, 'public');
         } else {
           try {
@@ -63,14 +70,10 @@ class UploadController extends Controller
                 $quality = 85; // Kualitas default (Titik aman)
 
                 if ($fileSize <= 100000) {
-                    // Jika file asli SANGAT KECIL (Di bawah 100 KB)
-                    // Gunakan kualitas 70 karena file aslinya sudah burik/terkompres
                     $quality = 70;
                 } elseif ($fileSize <= 500000) {
-                    // Jika file asli KECIL (100 KB - 500 KB)
                     $quality = 80;
                 } else {
-                    // Jika file asli BESAR (Di atas 500 KB / dari kamera resolusi tinggi)
                     $quality = 85;
                 }
                 // -------------------------------------
@@ -132,10 +135,16 @@ class UploadController extends Controller
                     ], 500);
                 }
 
-            } catch (\Exception $e) {
-                return response()->json([
-                    'message' => 'Terjadi kesalahan sistem: ' . $e->getMessage()
-                ], 500);
+            } catch (\Throwable $e) { // Catch \Throwable untuk menangkap Fatal Error (Error) juga
+                // Jika terjadi fatal error saat convert, fallback ke upload biasa
+                $filename = $safeName . '.' . $originalExtension;
+                $counter = 1;
+                while (Storage::disk('public')->exists('uploads/' . $filename)) {
+                    $filename = $safeName . ' (' . $counter . ').' . $originalExtension;
+                    $counter++;
+                }
+                $path = 'uploads/' . $filename;
+                $request->file('file')->storeAs('uploads', $filename, 'public');
             }
         }
 
