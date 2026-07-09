@@ -9,12 +9,15 @@ class UploadController extends Controller
 {
     public function upload(Request $request)
     {
+        // Deteksi apakah frontend mengirim 'image' atau 'file'
+        $uploadKey = $request->hasFile('image') ? 'image' : 'file';
+
         // Validasi input
         $request->validate([
-            'file' => 'required|image|mimes:jpg,jpeg,png,webp,gif|max:5120',
+            $uploadKey => 'required|image|mimes:jpg,jpeg,png,webp,gif|max:5120',
         ]);
 
-        $file = $request->file('file');
+        $file = $request->file($uploadKey);
         $originalExtension = strtolower($file->getClientOriginalExtension());
 
         // Dapatkan nama file asli (tanpa ekstensi)
@@ -59,7 +62,7 @@ class UploadController extends Controller
                 $counter++;
             }
             $path = 'uploads/' . $filename;
-            $request->file('file')->storeAs('uploads', $filename, 'public');
+            $file->storeAs('uploads', $filename, 'public');
         } else {
           try {
                 $sourcePath = $file->getRealPath();
@@ -144,7 +147,7 @@ class UploadController extends Controller
                     $counter++;
                 }
                 $path = 'uploads/' . $filename;
-                $request->file('file')->storeAs('uploads', $filename, 'public');
+                $file->storeAs('uploads', $filename, 'public');
             }
         }
 
