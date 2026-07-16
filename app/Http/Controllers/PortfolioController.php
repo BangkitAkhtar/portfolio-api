@@ -35,10 +35,10 @@ class PortfolioController extends Controller
                 "awards" => [],
                 "skills" => [],
                 "languages" => []
-            ]);
+            ])->header('Cache-Control', 'public, max-age=30');
         }
 
-        return response()->json($data);
+        return response()->json($data)->header('Cache-Control', 'public, max-age=30');
     }
 
     public function store(Request $request)
