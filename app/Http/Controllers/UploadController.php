@@ -102,13 +102,14 @@ class UploadController extends Controller
                     ], 500);
                 }
 
-                // --- SMART RESIZING (Maks 500px) ---
-                // Gambar ditampilkan max ~168px di grid & ~500px di lightbox mobile.
-                // 500px sudah tajam untuk retina, tapi ~2-3x lebih kecil dari 800px.
+                // --- SMART RESIZING (Maks 800px) ---
+                // Dikembalikan ke 800px: gambar juga tampil besar di Lightbox/DetailDialog
+                // (bisa sampai 85vh di layar desktop), jadi 500px bikin gambar pecah/buram
+                // saat di-zoom/lightbox.
                 $width = imagesx($image);
                 $height = imagesy($image);
-                $maxWidth = 500;
-                $maxHeight = 500;
+                $maxWidth = 800;
+                $maxHeight = 800;
 
                 if ($width > $maxWidth || $height > $maxHeight) {
                     $ratio = min($maxWidth / $width, $maxHeight / $height);
