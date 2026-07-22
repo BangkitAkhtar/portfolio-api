@@ -23,18 +23,32 @@ class UploadController extends Controller
             ], 413);
         }
 
-        // Deteksi apakah frontend mengirim 'image' atau 'file'
-        $uploadKey = $request->hasFile('image') ? 'image' : 'file';
+        // Tentukan key dari $_FILES, JANGAN dari hasFile(): saat PHP menolak sebuah
+        // upload (mis. melebihi upload_max_filesize), entri-nya tetap ada di $_FILES
+        // tapi hasFile() mengembalikan false. Memakai hasFile() di sini membuat key
+        // jatuh ke 'file', sehingga error aslinya tidak terbaca dan user hanya melihat
+        // "The file field is required" yang menyesatkan.
+        $uploadKey = isset($_FILES['image']) ? 'image' : (isset($_FILES['file']) ? 'file' : 'image');
 
-        // Kalau PHP menolak karena melebihi upload_max_filesize, file tetap muncul di
-        // $_FILES tapi dengan kode error INI_SIZE — tangani terpisah supaya jelas.
+        // Laporkan error upload level-PHP apa adanya, bukan cuma kasus kebesaran.
         $rawFile = $_FILES[$uploadKey] ?? null;
-        if (is_array($rawFile) && ($rawFile['error'] ?? null) === UPLOAD_ERR_INI_SIZE) {
-            return response()->json([
-                'message' => 'File melebihi batas upload server (upload_max_filesize = '
+        $uploadError = is_array($rawFile) ? (int) ($rawFile['error'] ?? UPLOAD_ERR_OK) : UPLOAD_ERR_OK;
+
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            $message = match ($uploadError) {
+                UPLOAD_ERR_INI_SIZE => 'File melebihi batas upload server (upload_max_filesize = '
                     . ini_get('upload_max_filesize') . '). Naikkan di cPanel > MultiPHP INI Editor, '
-                    . 'atau kompres file dulu sebelum upload.',
-            ], 413);
+                    . 'atau kompres file dulu.',
+                UPLOAD_ERR_FORM_SIZE => 'File melebihi batas ukuran yang ditetapkan form.',
+                UPLOAD_ERR_PARTIAL => 'File hanya terkirim sebagian — koneksi terputus. Coba ulangi.',
+                UPLOAD_ERR_NO_FILE => 'Tidak ada file yang dipilih.',
+                UPLOAD_ERR_NO_TMP_DIR => 'Server tidak punya folder temporary untuk upload (hubungi hosting).',
+                UPLOAD_ERR_CANT_WRITE => 'Server gagal menulis file ke disk — cek kuota/izin folder.',
+                UPLOAD_ERR_EXTENSION => 'Upload dihentikan oleh salah satu ekstensi PHP di server.',
+                default => 'Upload gagal (kode error PHP: ' . $uploadError . ').',
+            };
+
+            return response()->json(['message' => $message], 413);
         }
 
         // Cek dulu ekstensi supaya bisa pakai aturan validasi berbeda untuk PDF
