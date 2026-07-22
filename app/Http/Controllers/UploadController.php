@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\PdfProcessor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -95,13 +96,10 @@ class UploadController extends Controller
             // Simpan dulu file aslinya
             $file->storeAs('uploads', $filename, 'public');
 
-            // Coba kompres pakai Ghostscript (kalau tersedia di server).
-            // Kalau tidak ada, file tetap tersimpan apa adanya — upload tidak pernah gagal.
-            $this->compressPdf($absolutePath);
-
-            // Coba bikin thumbnail halaman pertama supaya preview di web ringan
-            // (tidak perlu download PDF-nya). Konvensi nama: <file>.pdf.webp
-            $this->makePdfThumbnail($absolutePath);
+            // Keduanya best-effort: kalau server tidak punya Ghostscript/Imagick,
+            // file tetap tersimpan apa adanya — upload tidak pernah gagal karenanya.
+            PdfProcessor::compress($absolutePath);
+            PdfProcessor::thumbnail($absolutePath);
 
             return response()->json([
                 'message' => 'PDF uploaded successfully',
@@ -238,97 +236,5 @@ class UploadController extends Controller
         };
     }
 
-    /**
-     * Kompres PDF di tempat memakai Ghostscript, kalau tersedia.
-     * Diam-diam dilewati kalau exec()/gs tidak ada — upload tidak boleh gagal karenanya.
-     * Hasil hanya dipakai kalau benar-benar lebih kecil dari aslinya.
-     */
-    private function compressPdf(string $absolutePath): void
-    {
-        try {
-            if (!is_file($absolutePath)) {
-                return;
-            }
 
-            $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
-            if (!function_exists('exec') || in_array('exec', $disabled, true)) {
-                return;
-            }
-
-            // Cari binary Ghostscript
-            $gs = null;
-            foreach (['gs', '/usr/bin/gs', '/usr/local/bin/gs', '/opt/bin/gs'] as $candidate) {
-                $out = [];
-                $code = 1;
-                @exec(escapeshellcmd($candidate) . ' --version 2>/dev/null', $out, $code);
-                if ($code === 0 && !empty($out)) {
-                    $gs = $candidate;
-                    break;
-                }
-            }
-            if (!$gs) {
-                return;
-            }
-
-            $tmp = $absolutePath . '.compressed.pdf';
-
-            // /ebook = target ~150dpi: seimbang antara ukuran kecil & teks/gambar tetap terbaca
-            $cmd = escapeshellcmd($gs)
-                . ' -sDEVICE=pdfwrite'
-                . ' -dCompatibilityLevel=1.4'
-                . ' -dPDFSETTINGS=/ebook'
-                . ' -dNOPAUSE -dQUIET -dBATCH -dSAFER'
-                . ' -sOutputFile=' . escapeshellarg($tmp)
-                . ' ' . escapeshellarg($absolutePath)
-                . ' 2>/dev/null';
-
-            $out = [];
-            $code = 1;
-            @exec($cmd, $out, $code);
-
-            if ($code === 0 && is_file($tmp) && filesize($tmp) > 0) {
-                // Hanya pakai hasil kompresi kalau memang lebih kecil
-                if (filesize($tmp) < filesize($absolutePath)) {
-                    @rename($tmp, $absolutePath);
-                } else {
-                    @unlink($tmp);
-                }
-            } elseif (is_file($tmp)) {
-                @unlink($tmp);
-            }
-        } catch (\Throwable $e) {
-            // Sengaja diabaikan: kompresi itu bonus, bukan syarat upload berhasil
-        }
-    }
-
-    /**
-     * Bikin thumbnail WebP dari halaman pertama PDF (butuh Imagick + delegate PDF).
-     * Disimpan sebagai "<file>.pdf.webp" supaya frontend bisa menebak namanya.
-     * Dilewati diam-diam kalau server tidak mendukung.
-     */
-    private function makePdfThumbnail(string $absolutePath): void
-    {
-        try {
-            if (!is_file($absolutePath) || !extension_loaded('imagick')) {
-                return;
-            }
-            if (empty(\Imagick::queryFormats('PDF'))) {
-                return;
-            }
-
-            $im = new \Imagick();
-            $im->setResolution(150, 150);
-            $im->readImage($absolutePath . '[0]'); // halaman pertama saja
-            $im->setImageBackgroundColor('white');
-            $im = $im->flattenImages();            // buang alpha supaya tidak hitam
-            $im->setImageFormat('webp');
-            $im->setImageCompressionQuality(82);
-            $im->thumbnailImage(800, 0);           // lebar maks 800px, rasio dijaga
-            $im->writeImage($absolutePath . '.webp');
-            $im->clear();
-            $im->destroy();
-        } catch (\Throwable $e) {
-            // Sengaja diabaikan: preview akan jatuh ke viewer browser di sisi frontend
-        }
-    }
 }
