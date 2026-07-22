@@ -9,18 +9,48 @@ class UploadController extends Controller
 {
     public function upload(Request $request)
     {
+        // PHP membuang $_POST & $_FILES sepenuhnya kalau body melebihi post_max_size,
+        // sehingga Laravel cuma melihat request kosong dan melapor "field required" —
+        // membingungkan. Deteksi kondisi ini dulu supaya pesannya jelas & bisa ditindak.
+        $contentLength = (int) ($request->server('CONTENT_LENGTH') ?? 0);
+        $postMax = $this->iniToBytes((string) ini_get('post_max_size'));
+        if ($contentLength > 0 && $postMax > 0 && $contentLength > $postMax && empty($_FILES)) {
+            return response()->json([
+                'message' => 'File terlalu besar untuk server (batas post_max_size = '
+                    . ini_get('post_max_size') . '). Naikkan upload_max_filesize & post_max_size '
+                    . 'di cPanel > MultiPHP INI Editor, atau kompres file dulu.',
+            ], 413);
+        }
+
         // Deteksi apakah frontend mengirim 'image' atau 'file'
         $uploadKey = $request->hasFile('image') ? 'image' : 'file';
+
+        // Kalau PHP menolak karena melebihi upload_max_filesize, file tetap muncul di
+        // $_FILES tapi dengan kode error INI_SIZE — tangani terpisah supaya jelas.
+        $rawFile = $_FILES[$uploadKey] ?? null;
+        if (is_array($rawFile) && ($rawFile['error'] ?? null) === UPLOAD_ERR_INI_SIZE) {
+            return response()->json([
+                'message' => 'File melebihi batas upload server (upload_max_filesize = '
+                    . ini_get('upload_max_filesize') . '). Naikkan di cPanel > MultiPHP INI Editor, '
+                    . 'atau kompres file dulu sebelum upload.',
+            ], 413);
+        }
 
         // Cek dulu ekstensi supaya bisa pakai aturan validasi berbeda untuk PDF
         // (aturan 'image' bawaan Laravel menolak PDF, dan PDF wajar berukuran lebih besar)
         $probe = $request->file($uploadKey);
         $isPdf = $probe && strtolower($probe->getClientOriginalExtension()) === 'pdf';
 
+        // Jangan menjanjikan batas lebih besar dari yang sanggup diterima PHP —
+        // kalau tidak, user dapat error membingungkan alih-alih pesan yang jelas.
+        $serverLimitKb = (int) floor($this->iniToBytes((string) ini_get('upload_max_filesize')) / 1024);
+        $pdfMaxKb = $serverLimitKb > 0 ? min(20480, $serverLimitKb) : 20480;
+        $imgMaxKb = $serverLimitKb > 0 ? min(5120, $serverLimitKb) : 5120;
+
         $request->validate([
             $uploadKey => $isPdf
-                ? 'required|file|mimes:pdf|max:20480'          // PDF sampai 20MB
-                : 'required|image|mimes:jpg,jpeg,png,webp,gif|max:5120',
+                ? "required|file|mimes:pdf|max:{$pdfMaxKb}"
+                : "required|image|mimes:jpg,jpeg,png,webp,gif|max:{$imgMaxKb}",
         ]);
 
         $file = $request->file($uploadKey);
@@ -186,6 +216,26 @@ class UploadController extends Controller
             'url' => asset('storage/' . $path),
             'path' => $path,
         ]);
+    }
+
+    /**
+     * Ubah notasi ukuran php.ini ("2M", "8M", "512K") jadi jumlah byte.
+     */
+    private function iniToBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return 0;
+        }
+        $unit = strtolower($value[strlen($value) - 1]);
+        $num = (int) $value;
+
+        return match ($unit) {
+            'g' => $num * 1024 * 1024 * 1024,
+            'm' => $num * 1024 * 1024,
+            'k' => $num * 1024,
+            default => (int) $value,
+        };
     }
 
     /**
