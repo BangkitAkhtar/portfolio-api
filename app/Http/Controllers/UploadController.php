@@ -97,9 +97,10 @@ class UploadController extends Controller
                 }
 
                 if (!$image) {
-                    return response()->json([
-                        'message' => 'Server gagal membaca format gambar ini.'
-                    ], 500);
+                    // GD kadang gagal decode PNG tertentu (16-bit/Photoshop, ICC profile aneh, dll)
+                    // walau file-nya valid. Jangan block upload — fallback simpan file aslinya,
+                    // sama seperti pola fallback GIF/error tak terduga di bawah.
+                    throw new \RuntimeException('GD gagal decode gambar, fallback ke file asli.');
                 }
 
                 // --- SMART RESIZING (Maks 800px) ---
@@ -136,9 +137,7 @@ class UploadController extends Controller
                 imagedestroy($image);
 
                 if (!$success) {
-                    return response()->json([
-                        'message' => 'Gagal menulis file WebP ke dalam storage cPanel.'
-                    ], 500);
+                    throw new \RuntimeException('Gagal menulis WebP, fallback ke file asli.');
                 }
 
             } catch (\Throwable $e) { // Catch \Throwable untuk menangkap Fatal Error (Error) juga
