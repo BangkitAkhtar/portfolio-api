@@ -11,9 +11,17 @@
 </IfModule>
 
 <IfModule mod_headers.c>
-    <FilesMatch "\.(webp|jpe?g|png|gif)$">
+    <FilesMatch "\.(webp|jpe?g|png|gif|pdf)$">
         Header set Cache-Control "public, max-age=31536000, immutable"
+        # Aset ini publik dan disajikan dari subdomain terpisah (api.*), sementara
+        # situsnya di domain utama. Tanpa CORS, browser memblokir pembacaan file
+        # lintas-origin — yang dibutuhkan untuk merender pratinjau PDF di canvas.
+        Header set Access-Control-Allow-Origin "*"
     </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresByType application/pdf "access plus 1 year"
 </IfModule>
 
 <IfModule mod_rewrite.c>
