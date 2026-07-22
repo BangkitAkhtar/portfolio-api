@@ -12,15 +12,25 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
-        $validPassword = env('ADMIN_PASSWORD', 'singa123'); // fallback if env is missing
-        $validToken = env('ADMIN_API_TOKEN');
+        // config(), BUKAN env(): setelah `php artisan config:cache`, env() di luar
+        // file config mengembalikan null dan login akan selalu gagal.
+        $validPassword = config('admin.password');
+        $validToken = config('admin.api_token');
 
-        if ($request->password === $validPassword) {
-            // Give a safe fallback if token is somehow missing in env during development
-            $tokenToReturn = $validToken ?: 'rahasia_token_panjang_sekali_123';
+        // Fail closed. Sebelumnya ada fallback kredensial yang di-hardcode di sini —
+        // berbahaya karena nilainya ikut tersimpan di riwayat repositori, sehingga
+        // siapa pun yang bisa membaca kode bisa masuk kalau .env gagal terbaca.
+        if (!$validPassword || !$validToken) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Admin credentials are not configured on the server.',
+            ], 500);
+        }
+
+        if (hash_equals((string) $validPassword, (string) $request->password)) {
             return response()->json([
                 'success' => true,
-                'token' => $tokenToReturn
+                'token' => $validToken,
             ]);
         }
 
